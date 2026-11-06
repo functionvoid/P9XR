@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Admin Dashboard</title>
+    <style>
+        body { 
+            background-color: #0c0f12; 
+            color: #c9d1d9; 
+            font-family: 'Courier New', Courier, monospace; 
+            padding: 20px; 
+            margin: 0; 
+            box-sizing: border-box;
+        }
+        h1, h2 { 
+            color: #58a6ff; 
+            border-bottom: 1px solid #30363d; 
+            padding-bottom: 10px; 
+        }
+        .container { 
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px; 
+        }
+        .panel { 
+            background-color: #161b22; 
+            border: 1px solid #30363d; 
+            border-radius: 6px; 
+            padding: 15px; 
+            flex: 1 1 100%; 
+            box-sizing: border-box;
+            word-break: break-all;
+        }
+        .log { 
+            background-color: #010409; 
+            border: 1px solid #30363d; 
+            padding: 10px; 
+            height: 120px; 
+            overflow-y: auto; 
+            color: #7ee787; 
+            font-size: 13px; 
+            border-radius: 6px; 
+            word-break: break-all;
+            margin-top: 10px;
+        }
+        .highlight { 
+            color: #ffcf54; 
+            font-weight: bold; 
+        }
+        .tx-history { 
+            list-style-type: none; 
+            padding: 0; 
+            margin: 0;
+        }
+        .tx-history li { 
+            background: #010409; 
+            padding: 12px; 
+            margin-bottom: 8px; 
+            border-radius: 4px; 
+            font-size: 12px; 
+            border: 1px solid #21262d; 
+            display: flex; 
+            flex-direction: column;
+            gap: 5px;
+            word-break: break-all;
+        }
+        @media (min-width: 768px) {
+            .tx-history li {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+            }
+        }
+        .clear-btn { 
+            background-color: #da3637; 
+            color: white; 
+            border: none;
+            padding: 6px 12px; 
+            font-size: 11px; 
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .clear-btn:hover { background-color: #b62b2c; }
+    </style>
+</head>
+<body>
+
+    <h1>👑 Administrator Dashboard (Grootboek)</h1>
+    <p>Ontvangststation: Verwerkt inkomende claims en houdt de Mainnet-uitbetalingslijst lokaal bij.</p>
+
+    <div class="container">
+        
+        <!-- GROOTBOEK OVERZICHT -->
+        <div class="panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; margin-bottom: 10px; padding-bottom: 10px;">
+                <h2>📜 Te Verwerken Mainnet Uitbetalingen</h2>
+                <button class="clear-btn" onclick="clearDatabase()">🗑️ Wis Grootboek</button>
+            </div>
+            
+            <ul id="block-chain-list" class="tx-history">
+                <!-- Vulling via LocalStorage of inkomende URL parameters -->
+            </ul>
+
+            <h2>💻 Systeem Berichten</h2>
+            <div id="console-log" class="log">
+                [SYSTEM] Dashboard stand-by. Luisteren naar binnenkomende netwerk-links...
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let savedTransactions = [];
+
+        window.onload = function() {
+            // 1. Laad eerdere goedgekeurde administratie in vanuit LocalStorage
+            const localData = localStorage.getItem('one_file_ledger_data');
+            if (localData) {
+                savedTransactions = JSON.parse(localData);
+            }
+
+            // 2. PARSE-CHECK: Controleer of er een deelnemer via een link binnenkomt
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('miner') && urlParams.has('address') && urlParams.has('hash')) {
+                const incomingMiner = urlParams.get('miner');
+                const incomingAddress = urlParams.get('address');
+                const incomingHash = urlParams.get('hash');
+                const incomingNonce = urlParams.get('nonce');
+
+                // Beveiliging: Check of deze hash niet al geregistreerd staat
+                const exists = savedTransactions.some(tx => tx.hash === incomingHash);
+
+                if (!exists) {
+                    savedTransactions.push({
+                        block: savedTransactions.length + 1,
+                        miner: incomingMiner,
+                        address: incomingAddress,
+                        hash: incomingHash,
+                        nonce: incomingNonce,
+                        reward: "10.50 BTC",
+                        timestamp: new Date().toLocaleString('nl-NL')
+                    });
+                    
+                    // Schrijf de data hard weg in de browser cache
+                    localStorage.setItem('one_file_ledger_data', JSON.stringify(savedTransactions));
+                    logToConsole(`[➕ LIVE UPDATE] Geldige claim binnengekregen! Miner <span class="highlight">${incomingMiner}</span> heeft zijn Bitcoin-adres gedeeld.`);
+                } else {
+                    logToConsole(`[!] Inkomende claim van ${incomingMiner} was al bekend en verwerkt in het grootboek.`);
+                }
+                
+                // Schoon de URL-balk direct op zodat verversen de transactie niet dubbel telt
+                window.history.replaceState({}, document.title, window.location.pathname);
+            } else {
+                logToConsole("[SYSTEM] Grootboek succesvol ingeladen. Wachten op nieuwe links...");
+            }
+
+            updateVisualChain();
+        };
+
+        function updateVisualChain() {
+            const list = document.getElementById('block-chain-list');
+            if (savedTransactions.length === 0) {
+                list.innerHTML = `<li><em style="color:#8b949e;">Het grootboek is leeg. Deelnemers moeten eerst een claim-link genereren in miner.html en naar je opsturen.</em></li>`;
+                return;
+            }
+            list.innerHTML = "";
+            savedTransactions.forEach((tx) => {
+                list.innerHTML += `<li>
+                    <span><strong>Block #${tx.block}</strong> | Miner: 👤${tx.miner} <br>➡️ Mainnet Adres: <span class="highlight">${tx.address}</span></span>
+                    <span style="color:#7ee787; font-weight:bold;">💰 Opeisbaar: ${tx.reward} (${tx.timestamp})</span>
+                </li>`;
+            });
+        }
+
+        function clearDatabase() {
+            if (confirm("Weet je zeker dat je de complete uitbetalingslijst wilt wissen?")) {
+                localStorage.removeItem('one_file_ledger_data');
+                savedTransactions = [];
+                updateVisualChain();
+                logToConsole("[SYSTEM] Grootboek volledig geleegd.");
+            }
+        }
+
+        function logToConsole(message) {
+            const logDiv = document.getElementById('console-log');
+            logDiv.innerHTML += message + "<br>";
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>
