@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Miner Interface</title>
+    <style>
+        body { background-color: #0c0f12; color: #c9d1d9; font-family: 'Courier New', Courier, monospace; padding: 20px; margin: 0; box-sizing: border-box; }
+        h1, h2 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+        .panel { background-color: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 15px; max-width: 600px; margin: 0 auto; box-sizing: border-box; word-break: break-all; }
+        button { background-color: #238636; color: white; border: 1px solid rgba(240,246,252,0.1); padding: 12px 20px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; font-family: inherit; width: 100%; margin-top: 10px; box-sizing: border-box; }
+        button:hover { background-color: #2ea44f; }
+        button:disabled { background-color: #21262d; color: #8b949e; cursor: not-allowed; }
+        .log { background-color: #010409; border: 1px solid #30363d; padding: 10px; height: 130px; overflow-y: auto; color: #7ee787; font-size: 13px; border-radius: 6px; word-break: break-all; margin-top: 15px; }
+        .input-group { margin-bottom: 15px; text-align: left; }
+        input, select { width: 100%; padding: 10px; background: #010409; border: 1px solid #30363d; color: #7ee787; border-radius: 6px; font-family: inherit; box-sizing: border-box; }
+        .payout-box { background-color: #1f242c; border: 2px dashed #ffcf54; padding: 15px; border-radius: 6px; margin-top: 15px; display: none; word-break: break-all; }
+        .claim-btn { background-color: #ffcf54; color: #0c0f12; }
+        .claim-btn:hover { background-color: #eebb3a; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h1>⛏️ Deelnemer Sectie (Miner)</h1>
+        <p>Vul je gegevens in en start de loop om een block-transactie te genereren.</p>
+        
+        <div class="input-group">
+            <label>Jouw Miner Naam:</label><br>
+            <input type="text" id="miner-name" value="Miner_Alpha">
+        </div>
+        <div class="input-group">
+            <label>Jouw Mainnet Bitcoin Adres:</label><br>
+            <input type="text" id="btc-address" value="bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh">
+        </div>
+        <div class="input-group">
+            <label>Moeilijkheidsgraad (Difficulty):</label>
+            <select id="difficulty">
+                <option value="4" selected>4 (Snel testen)</option>
+                <option value="5">5 (Zwaarder)</option>
+            </select>
+        </div>
+        <button id="start-btn" onclick="runClientSideMining()">⛏️ Start Participatie Loop</button>
+
+        <div id="payout-box" class="payout-box">
+            <h3 style="margin-top:0; color:#ffcf54;">🎉 BLOCK SUCCESVOL GEKRAAKT</h3>
+            <p>Je unieke claim-code is gegenereerd. Klik op de knop hieronder om de link te kopiëren en stuur deze naar de administrator.</p>
+            <button class="claim-btn" id="copy-link-btn" onclick="copyClaimLink()">📋 Kopieer Claim-Link</button>
+        </div>
+
+        <div id="console-log" class="log">
+            [SYSTEM] Stand-by. Wachten op invoer...
+        </div>
+    </div>
+
+    <script>
+        let lastGeneratedLink = "";
+
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);                    
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function runClientSideMining() {
+            const btcAddress = document.getElementById('btc-address').value.trim();
+            const minerName = document.getElementById('miner-name').value.trim();
+            const difficulty = parseInt(document.getElementById('difficulty').value);
+
+            if (!btcAddress) { alert("Voer een Bitcoin-adres in!"); return; }
+
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('payout-box').style.display = 'none';
+            logToConsole(`[*] Computatie gestart voor adres: ${btcAddress}...`);
+
+            let nonce = 0;
+            const targetPrefix = "0".repeat(difficulty);
+
+            while (true) {
+                nonce++;
+                let currentHash = await sha256(minerName + btcAddress + nonce);
+
+                if (currentHash.startsWith(targetPrefix)) {
+                    logToConsole(`[+] Code gekraakt! Nonce: ${nonce}`);
+
+                    // BELANGRIJK: Verwijs hier naar de naam van het tweede bestand (dashboard.html)
+                    // Als je het online zet, vervangt dit automatisch de base URL naar dashboard.html
+                    const currentUrl = window.location.href;
+                    const pathArray = currentUrl.split('/');
+                    pathArray[pathArray.length - 1] = "dashboard.html";
+                    const dashboardBaseUrl = pathArray.join('/');
+
+                    lastGeneratedLink = `${dashboardBaseUrl}?miner=${encodeURIComponent(minerName)}&address=${encodeURIComponent(btcAddress)}&hash=${encodeURIComponent(currentHash)}&nonce=${nonce}`;
+
+                    document.getElementById('payout-box').style.display = 'block';
+                    break;
+                }
+
+                if (nonce % 2000 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+            document.getElementById('start-btn').disabled = false;
+        }
+
+        function copyClaimLink() {
+            if (!lastGeneratedLink) return;
+            navigator.clipboard.writeText(lastGeneratedLink);
+            alert("Claim-Link gekopieerd naar klembord! Stuur deze link naar de beheerder.");
+        }
+
+        function logToConsole(message) {
+            const logDiv = document.getElementById('console-log');
+            logDiv.innerHTML += message + "<br>";
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>
